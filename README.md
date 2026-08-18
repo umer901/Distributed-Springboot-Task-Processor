@@ -1,22 +1,24 @@
 # Distributed Spring Boot Task Processor
 
-A backend-focused distributed task processing system built with Java 21, Spring Boot,
-PostgreSQL, and RabbitMQ.
+(Built with Java 21, Spring Boot, PostgreSQL, RabbitMQ and Robot Framework)
+
+This project is a backend system for running tasks asynchronously instead of making users wait for long work to finish. A client sends a task through the REST API, the API stores it in PostgreSQL, then RabbitMQ delivers the work to a background worker. The client can later check the task status (queued, running, succeeded, failed, cancelled, or being retried).
+
+The project handles retries, failures, duplicate requests, timeouts, database recovery, and clean shutdowns. Docker Compose runs the services like separate microservices, while tests using JUnit and Robot Framework prove that the API, database, queue, and worker all cooperate correctly.
 
 Current implementation includes:
 
 - Maven/Spring Boot project scaffolding.
 - PostgreSQL schema managed by Flyway.
 - REST APIs for creating, reading, listing, and cancelling tasks.
-- Transactional idempotent task creation.
-- Transactional outbox publishing to RabbitMQ.
+- Taask creation and publishing to RabbitMQ.
 - RabbitMQ workers that claim and execute tasks safely.
 - Retry scheduling, timeout recovery, and duplicate-message tolerance.
 - Docker Compose services for API, worker, PostgreSQL, and RabbitMQ.
 - Testcontainers integration tests.
 - Robot Framework end-to-end API tests.
 - GitLab CI/CD pipeline.
-- Actuator and Prometheus endpoints.
+- Monitoring and logs.
 
 ## Requirements
 
