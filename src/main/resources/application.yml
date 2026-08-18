@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: distributed-task-processor
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/tasks}
+    username: ${SPRING_DATASOURCE_USERNAME:task_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:task_password}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      pool-name: task-processor-pool
+  flyway:
+    enabled: true
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:task_user}
+    password: ${SPRING_RABBITMQ_PASSWORD:task_password}
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+task-processor:
+  idempotency:
+    ttl-days: 7
+  rabbitmq:
+    exchange: task.processor.exchange
+    queue: task.processor.work
+    routing-key: task.work
