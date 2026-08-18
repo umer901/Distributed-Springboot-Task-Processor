@@ -335,16 +335,204 @@ Open API documentation:
 http://localhost:8080/swagger-ui.html
 ```
 
-## 15. What To Build Next
+## 15. Add Runtime Roles
 
-The current project accepts tasks and stores outbox events, but it does not yet
-publish or execute work. The next development slice should add:
+Update `src/main/resources/application.yml`.
 
-- RabbitMQ exchange, queue, and binding configuration.
-- Outbox publisher that sends pending `TASK_CREATED` events to RabbitMQ.
-- Worker consumer that claims queued tasks from PostgreSQL.
-- Task handler interface and demo handlers.
-- Retry and timeout recovery.
+Purpose:
+
+- Add `task-processor.runtime.api-enabled`.
+- Add `task-processor.runtime.worker-enabled`.
+- Add `task-processor.runtime.outbox-enabled`.
+- Let the same Spring Boot image run as API-only, worker-only, or all-in-one.
+
+Update `src/main/java/com/umer/taskprocessor/config/TaskProcessorProperties.java`.
+
+Purpose:
+
+- Bind runtime, RabbitMQ, outbox, worker, and retry settings into typed Java
+  records.
+- Keep configuration discoverable and compile-time checked.
+
+Update `TaskController`.
+
+Purpose:
+
+- Add `@ConditionalOnProperty` so the public task API only loads when
+  `api-enabled=true`.
+
+## 16. Add RabbitMQ Topology
+
+Create `src/main/java/com/umer/taskprocessor/config/RabbitMqConfig.java`.
+
+Purpose:
+
+- Declares the durable direct exchange.
+- Declares the durable task queue.
+- Declares a dead-letter queue for rejected malformed messages.
+- Binds the task queue to the exchange with the configured routing key.
+- Configures JSON message conversion.
+- Configures manual acknowledgement and worker prefetch.
+
+Why manual acknowledgement matters:
+
+- The worker only acknowledges after it has safely handled the message.
+- If the message is malformed, it is rejected without requeue.
+- If the message is duplicate or stale, the worker acknowledges it because
+  PostgreSQL already proves there is no work to do.
+
+## 17. Add Outbox Publishing
+
+Create `src/main/java/com/umer/taskprocessor/outbox/OutboxRecord.java`.
+
+Purpose:
+
+- Represents a pending row from `task_outbox`.
+
+Update `src/main/java/com/umer/taskprocessor/repository/OutboxRepository.java`.
+
+Purpose:
+
+- Find due pending rows with `FOR UPDATE SKIP LOCKED`.
+- Mark rows as published after RabbitMQ accepts the message.
+- Reschedule publish attempts after transient failures.
+- Insert retry dispatch events when a task needs another attempt.
+
+Create `src/main/java/com/umer/taskprocessor/outbox/OutboxPublisher.java`.
+
+Purpose:
+
+- Runs on a schedule.
+- Reads due outbox rows.
+- Publishes persistent RabbitMQ messages.
+- Marks outbox rows as published in PostgreSQL.
+
+Design note:
+
+- RabbitMQ messages contain the task ID, not the full task payload.
+- PostgreSQL remains the source of truth.
+
+## 18. Add Worker Task Execution
+
+Create files under `src/main/java/com/umer/taskprocessor/worker/`.
+
+Purpose:
+
+- `TaskHandler` defines the contract for executable task types.
+- `TaskExecutionResult` wraps handler output.
+- `TaskExecutionException` carries failure code and retryability.
+- `TaskHandlerRegistry` resolves a task type to a handler.
+- `ChecksumTaskHandler` implements the `CHECKSUM` demo task.
+- `DelayTaskHandler` implements the `DELAY` demo task.
+- `RetryPolicy` calculates exponential backoff.
+- `TaskWorkerService` owns worker execution flow.
+- `TaskMessageListener` consumes RabbitMQ messages with manual ack.
+- `TaskRecoveryScheduler` recovers expired running tasks.
+
+Worker execution flow:
+
+1. RabbitMQ delivers a message containing `taskId`.
+2. The worker tries to claim the task in PostgreSQL.
+3. If the task is not claimable, the message is acknowledged and ignored.
+4. If claimed, the worker inserts a running attempt row.
+5. The matching handler executes.
+6. Success stores `result` and marks the task `SUCCEEDED`.
+7. Retryable failure schedules `RETRY_SCHEDULED` and inserts a future outbox row.
+8. Non-retryable or exhausted failure marks the task `FAILED`.
+9. Expired locks are recovered by the scheduler and either retried or timed out.
+
+Important SQL idea:
+
+- Claiming uses a conditional `UPDATE ... RETURNING`.
+- This makes only one worker able to move a task from `QUEUED` or
+  `RETRY_SCHEDULED` to `RUNNING`.
+
+## 19. Add Metrics
+
+Create `src/main/java/com/umer/taskprocessor/metrics/TaskProcessingMetrics.java`.
+
+Purpose:
+
+- Counts published outbox events.
+- Counts publish failures.
+- Counts succeeded, failed, retried, and timed-out tasks.
+- Exposes a gauge for pending outbox rows.
+
+Check metrics locally:
+
+```bash
+curl http://localhost:8080/actuator/prometheus
+```
+
+## 20. Add Dockerized Service Roles
+
+Create `Dockerfile`.
+
+Purpose:
+
+- Builds the Spring Boot jar with Maven.
+- Runs it on a Java 21 runtime image.
+
+Create `.dockerignore`.
+
+Purpose:
+
+- Keeps build output, local Maven cache, Git metadata, and IDE files out of the
+  Docker build context.
+
+Update `docker-compose.yml`.
+
+Purpose:
+
+- Add `api`, `worker`, `postgres`, and `rabbitmq` services.
+- Run API and worker as separate services using the same image.
+- Set environment variables so API and worker have different runtime roles.
+
+Build and run the full stack:
+
+```bash
+./scripts/stack-up.sh
+```
+
+The Compose architecture is:
+
+```text
+client -> api -> postgres -> task_outbox -> worker publisher -> rabbitmq -> worker consumer -> postgres
+```
+
+## 21. Add Worker Tests
+
+Create:
+
+- `src/test/java/com/umer/taskprocessor/worker/RetryPolicyTest.java`
+- `src/test/java/com/umer/taskprocessor/worker/ChecksumTaskHandlerTest.java`
+
+Purpose:
+
+- Verify exponential backoff behavior.
+- Verify retry limits.
+- Verify `CHECKSUM` produces the expected SHA-256 output.
+- Verify invalid handler input fails as non-retryable.
+
+Run tests:
+
+```bash
+mvn -Dmaven.repo.local=.m2/repository test
+```
+
+Expected result after this slice:
+
+```text
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+## 22. What To Build Next
+
+The current project now accepts, publishes, and executes tasks. The next
+development slice should add:
+
 - Testcontainers integration tests for PostgreSQL and RabbitMQ behavior.
 - Robot Framework end-to-end API tests.
 - GitLab CI pipeline.
+- More operational documentation and troubleshooting examples.

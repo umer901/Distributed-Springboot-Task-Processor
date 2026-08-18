@@ -1,4 +1,52 @@
 services:
+  api:
+    build:
+      context: .
+    image: distributed-task-processor:local
+    container_name: task-processor-api
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tasks
+      SPRING_DATASOURCE_USERNAME: task_user
+      SPRING_DATASOURCE_PASSWORD: task_password
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: task_user
+      SPRING_RABBITMQ_PASSWORD: task_password
+      TASK_PROCESSOR_API_ENABLED: "true"
+      TASK_PROCESSOR_WORKER_ENABLED: "false"
+      TASK_PROCESSOR_OUTBOX_ENABLED: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  worker:
+    image: distributed-task-processor:local
+    container_name: task-processor-worker
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tasks
+      SPRING_DATASOURCE_USERNAME: task_user
+      SPRING_DATASOURCE_PASSWORD: task_password
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: task_user
+      SPRING_RABBITMQ_PASSWORD: task_password
+      TASK_PROCESSOR_API_ENABLED: "false"
+      TASK_PROCESSOR_WORKER_ENABLED: "true"
+      TASK_PROCESSOR_OUTBOX_ENABLED: "true"
+      TASK_PROCESSOR_WORKER_ID: compose-worker-1
+    ports:
+      - "8081:8081"
+    depends_on:
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
   postgres:
     image: postgres:17-alpine
     container_name: task-processor-postgres

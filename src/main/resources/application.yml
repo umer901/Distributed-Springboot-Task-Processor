@@ -36,9 +36,26 @@ management:
       application: ${spring.application.name}
 
 task-processor:
+  runtime:
+    api-enabled: ${TASK_PROCESSOR_API_ENABLED:true}
+    worker-enabled: ${TASK_PROCESSOR_WORKER_ENABLED:true}
+    outbox-enabled: ${TASK_PROCESSOR_OUTBOX_ENABLED:true}
   idempotency:
     ttl-days: 7
   rabbitmq:
     exchange: task.processor.exchange
     queue: task.processor.work
     routing-key: task.work
+    dead-letter-queue: task.processor.dead-letter
+  outbox:
+    batch-size: ${TASK_PROCESSOR_OUTBOX_BATCH_SIZE:25}
+    publish-delay-millis: ${TASK_PROCESSOR_OUTBOX_DELAY_MS:1000}
+  worker:
+    id: ${TASK_PROCESSOR_WORKER_ID:${HOSTNAME:local-worker}}
+    prefetch: ${TASK_PROCESSOR_WORKER_PREFETCH:4}
+    recovery-batch-size: ${TASK_PROCESSOR_RECOVERY_BATCH_SIZE:25}
+    recovery-delay-millis: ${TASK_PROCESSOR_RECOVERY_DELAY_MS:5000}
+  retry:
+    initial-backoff-millis: ${TASK_PROCESSOR_RETRY_INITIAL_MS:1000}
+    max-backoff-millis: ${TASK_PROCESSOR_RETRY_MAX_MS:30000}
+    multiplier: ${TASK_PROCESSOR_RETRY_MULTIPLIER:2.0}
