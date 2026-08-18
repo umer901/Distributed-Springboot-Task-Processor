@@ -92,7 +92,7 @@ public class TaskRepository {
                     attempt_count = attempt_count + 1,
                     started_at = ?,
                     lock_owner = ?,
-                    lock_expires_at = ? + make_interval(secs => timeout_seconds),
+                    lock_expires_at = ?::timestamptz + make_interval(secs => timeout_seconds),
                     updated_at = ?,
                     version = version + 1
                 WHERE id = ?
@@ -105,6 +105,7 @@ public class TaskRepository {
                 taskRowMapper,
                 Timestamp.from(now),
                 workerId,
+                Timestamp.from(now),
                 Timestamp.from(now),
                 id,
                 Timestamp.from(now));

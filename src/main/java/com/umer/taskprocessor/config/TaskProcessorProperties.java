@@ -11,7 +11,7 @@ public record TaskProcessorProperties(
         Worker worker,
         Retry retry) {
 
-    public record Runtime(boolean apiEnabled, boolean workerEnabled, boolean outboxEnabled) {
+    public record Runtime(boolean apiEnabled, boolean workerEnabled, boolean outboxEnabled, boolean schedulingEnabled) {
     }
 
     public record Idempotency(int ttlDays) {

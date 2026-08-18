@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class RetryPolicyTest {
 
     private final RetryPolicy retryPolicy = new RetryPolicy(new TaskProcessorProperties(
-            new TaskProcessorProperties.Runtime(true, true, true),
+            new TaskProcessorProperties.Runtime(true, true, true, true),
             new TaskProcessorProperties.Idempotency(7),
             new TaskProcessorProperties.Rabbitmq("exchange", "queue", "key", "dead"),
             new TaskProcessorProperties.Outbox(25, 1000),

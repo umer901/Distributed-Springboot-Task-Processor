@@ -344,7 +344,10 @@ Purpose:
 - Add `task-processor.runtime.api-enabled`.
 - Add `task-processor.runtime.worker-enabled`.
 - Add `task-processor.runtime.outbox-enabled`.
+- Add `task-processor.runtime.scheduling-enabled`.
 - Let the same Spring Boot image run as API-only, worker-only, or all-in-one.
+- Let tests or special deployments disable scheduled recovery/outbox loops while
+  still keeping the underlying beans available for direct calls.
 
 Update `src/main/java/com/umer/taskprocessor/config/TaskProcessorProperties.java`.
 
@@ -527,12 +530,121 @@ Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
-## 22. What To Build Next
+## 22. Add Testcontainers Integration Tests
 
-The current project now accepts, publishes, and executes tasks. The next
-development slice should add:
+Create `src/test/java/com/umer/taskprocessor/integration/TaskProcessingIT.java`.
 
-- Testcontainers integration tests for PostgreSQL and RabbitMQ behavior.
-- Robot Framework end-to-end API tests.
-- GitLab CI pipeline.
-- More operational documentation and troubleshooting examples.
+Purpose:
+
+- Boots the Spring application on a random port.
+- Starts real PostgreSQL and RabbitMQ containers.
+- Creates a task through the REST API.
+- Waits for the outbox publisher and worker to execute it.
+- Verifies final task state, handler result, task attempts, and published outbox
+  rows.
+- Verifies idempotent replay and `409 Conflict` behavior against a real database.
+
+Run integration tests:
+
+```bash
+mvn -Dmaven.repo.local=.m2/repository verify
+```
+
+Why this matters:
+
+- Unit tests prove local logic.
+- Integration tests prove the service can coordinate PostgreSQL transactions,
+  RabbitMQ messages, Flyway migrations, Spring scheduling, and worker consumers.
+
+## 23. Add Robot Framework E2E Tests
+
+Create `requirements-robot.txt`.
+
+Purpose:
+
+- Pins Robot Framework and RequestsLibrary versions.
+
+Create `tests/robot/task_api.robot`.
+
+Purpose:
+
+- Exercises the service as an external API client.
+- Checks health.
+- Creates a task and polls until `SUCCEEDED`.
+- Verifies idempotency replay and conflict.
+- Verifies validation problem responses.
+- Verifies Prometheus metrics are exposed.
+
+Create `scripts/run-e2e.sh`.
+
+Purpose:
+
+- Creates a local Python test environment.
+- Installs Robot dependencies.
+- Runs the Robot suite against `BASE_URL`.
+
+Run Robot locally:
+
+```bash
+./scripts/stack-up.sh
+./scripts/run-e2e.sh
+```
+
+Run Robot inside Docker Compose:
+
+```bash
+docker compose --profile test run --rm robot-tests
+```
+
+## 24. Add GitLab CI/CD
+
+Create `.gitlab-ci.yml`.
+
+Purpose:
+
+- `unit_tests` runs fast Maven tests.
+- `integration_tests` runs `mvn verify` with Testcontainers and Docker-in-Docker.
+- `robot_e2e` starts the Compose stack and runs Robot inside the Compose network.
+- `package_image` builds the Spring Boot jar and Docker image.
+
+Important CI environment variables:
+
+- `MAVEN_OPTS=-Dmaven.repo.local=.m2/repository` keeps Maven dependencies cached
+  in the project workspace.
+- `DOCKER_HOST=tcp://docker:2375` points Testcontainers and Docker Compose at the
+  GitLab Docker-in-Docker service.
+- `TESTCONTAINERS_RYUK_DISABLED=true` avoids privileged sidecar requirements in
+  many shared CI runners.
+
+## 25. Add Operational Scripts
+
+Create `scripts/wait-for-url.sh`.
+
+Purpose:
+
+- Polls an HTTP endpoint until it is ready.
+- Used by CI before running Robot tests.
+
+Create `scripts/load-generator.py`.
+
+Purpose:
+
+- Submits a batch of sample tasks.
+- Polls task states until all tasks become terminal.
+- Helps developers observe worker throughput, retries, and metrics locally.
+
+Example:
+
+```bash
+./scripts/load-generator.py --count 50 --task-type CHECKSUM
+```
+
+## 26. Project Completion Notes
+
+The project now accepts, publishes, and executes tasks with automated test layers
+around the main reliability behavior. Natural next improvements are:
+
+- Authentication and authorization for the REST API.
+- More task handler examples with external API calls.
+- Dashboarding examples for Prometheus metrics.
+- Production deployment manifests for Kubernetes or another orchestrator.

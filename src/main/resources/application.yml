@@ -40,6 +40,7 @@ task-processor:
     api-enabled: ${TASK_PROCESSOR_API_ENABLED:true}
     worker-enabled: ${TASK_PROCESSOR_WORKER_ENABLED:true}
     outbox-enabled: ${TASK_PROCESSOR_OUTBOX_ENABLED:true}
+    scheduling-enabled: ${TASK_PROCESSOR_SCHEDULING_ENABLED:true}
   idempotency:
     ttl-days: 7
   rabbitmq:

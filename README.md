@@ -13,6 +13,9 @@ Current implementation includes:
 - RabbitMQ workers that claim and execute tasks safely.
 - Retry scheduling, timeout recovery, and duplicate-message tolerance.
 - Docker Compose services for API, worker, PostgreSQL, and RabbitMQ.
+- Testcontainers integration tests.
+- Robot Framework end-to-end API tests.
+- GitLab CI/CD pipeline.
 - Actuator and Prometheus endpoints.
 
 ## Requirements
@@ -71,6 +74,12 @@ Prometheus metrics are available at:
 http://localhost:8080/actuator/prometheus
 ```
 
+Run a small local load sample:
+
+```bash
+./scripts/load-generator.py --count 20
+```
+
 ## Local Services
 
 - PostgreSQL: `localhost:5432`, database `tasks`, user `task_user`, password `task_password`
@@ -93,6 +102,9 @@ The API and worker share one codebase and image, but they run as separate servic
 with different environment flags. This is a practical microservice deployment
 pattern: scale API replicas for request traffic, scale worker replicas for
 background throughput, and keep PostgreSQL as the source of truth.
+The runtime flags also include `TASK_PROCESSOR_SCHEDULING_ENABLED`, which is
+useful for tests and controlled maintenance modes where scheduled loops should
+not run automatically.
 
 Creating a task is transactional:
 
@@ -123,12 +135,40 @@ Supported demo task types:
 
 ## Test Commands
 
-Run the automated suite:
+Run fast unit tests:
+
+```bash
+mvn -Dmaven.repo.local=.m2/repository test
+```
+
+Run unit and Testcontainers integration tests:
 
 ```bash
 ./scripts/run-tests.sh
 ```
 
-At this stage, the suite covers idempotency hashing, retry backoff, and handler
-behavior. The next slices will add Testcontainers-backed PostgreSQL/RabbitMQ
-integration tests, Robot Framework API tests, and GitLab CI.
+Run Robot Framework E2E tests against a local stack:
+
+```bash
+./scripts/stack-up.sh
+./scripts/run-e2e.sh
+```
+
+Or run Robot inside the Compose network:
+
+```bash
+docker compose --profile test run --rm robot-tests
+```
+
+The suite covers idempotency hashing, retry backoff, task handlers,
+PostgreSQL/RabbitMQ integration, full asynchronous task completion, API problem
+responses, metrics exposure, and black-box Robot API flows.
+
+## CI/CD
+
+`.gitlab-ci.yml` defines four stages:
+
+- `test`: fast Maven unit tests.
+- `integration`: `mvn verify` with Testcontainers and Docker-in-Docker.
+- `e2e`: starts the Compose API/worker stack and runs Robot Framework tests.
+- `package`: builds the Spring Boot jar and Docker image.

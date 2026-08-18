@@ -1,6 +1,7 @@
 package com.umer.taskprocessor.worker;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
@@ -36,9 +37,12 @@ public class TaskMessageListener {
             UUID taskId = readTaskId(message);
             taskWorkerService.process(taskId);
             channel.basicAck(deliveryTag, false);
-        } catch (Exception ex) {
-            log.warn("Task message could not be processed; rejecting without requeue", ex);
+        } catch (IllegalArgumentException | JsonProcessingException ex) {
+            log.warn("Task message is malformed; rejecting without requeue", ex);
             channel.basicReject(deliveryTag, false);
+        } catch (Exception ex) {
+            log.warn("Task message could not be processed; requeueing for another attempt", ex);
+            channel.basicNack(deliveryTag, false, true);
         }
     }
 

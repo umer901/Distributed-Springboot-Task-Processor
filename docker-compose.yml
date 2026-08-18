@@ -47,6 +47,26 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  robot-tests:
+    image: python:3.13-alpine
+    profiles:
+      - test
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      BASE_URL: http://api:8080
+      RESULT_DIR: robot-results
+    command: >
+      sh -lc "apk add --no-cache bash curl py3-virtualenv
+      && ./scripts/wait-for-url.sh http://api:8080/actuator/health 90
+      && ./scripts/run-e2e.sh"
+    depends_on:
+      api:
+        condition: service_started
+      worker:
+        condition: service_started
+
   postgres:
     image: postgres:17-alpine
     container_name: task-processor-postgres

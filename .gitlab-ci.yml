@@ -1,0 +1,85 @@
+stages:
+  - test
+  - integration
+  - e2e
+  - package
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_TLS_CERTDIR: ""
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .m2/repository
+
+unit_tests:
+  stage: test
+  image: maven:3.9.11-eclipse-temurin-21
+  script:
+    - mvn $MAVEN_OPTS test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+    paths:
+      - target/surefire-reports/
+
+integration_tests:
+  stage: integration
+  image: maven:3.9.11-eclipse-temurin-21
+  services:
+    - name: docker:27-dind
+      alias: docker
+      command: ["--tls=false"]
+  script:
+    - mvn $MAVEN_OPTS verify
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+        - target/failsafe-reports/TEST-*.xml
+    paths:
+      - target/surefire-reports/
+      - target/failsafe-reports/
+
+robot_e2e:
+  stage: e2e
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      alias: docker
+      command: ["--tls=false"]
+  before_script:
+    - apk add --no-cache bash curl openjdk21 maven
+  script:
+    - ./scripts/stack-up.sh
+    - docker compose --profile test run --rm robot-tests
+  after_script:
+    - docker compose logs api worker postgres rabbitmq > docker-compose-e2e.log || true
+    - docker compose down -v || true
+  artifacts:
+    when: always
+    paths:
+      - robot-results/
+      - docker-compose-e2e.log
+
+package_image:
+  stage: package
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      alias: docker
+      command: ["--tls=false"]
+  before_script:
+    - apk add --no-cache bash openjdk21 maven
+  script:
+    - mvn $MAVEN_OPTS -DskipTests package
+    - docker build -t distributed-task-processor:$CI_COMMIT_SHORT_SHA .
+  artifacts:
+    paths:
+      - target/*.jar
